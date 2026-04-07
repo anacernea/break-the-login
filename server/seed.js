@@ -1,4 +1,3 @@
-const bcrypt = require('bcrypt');
 
 async function seedDatabase(db) {
 
@@ -9,6 +8,7 @@ async function seedDatabase(db) {
 	return { users };
 }
 
+//obs: deocamdata parola va fi stocata in clar, chiar daca campul se numeste password_hash
 function initializeSchema(db) {
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS users (
@@ -55,7 +55,7 @@ async function seedUsers(db) {
 
 	insertUser.run(
 		"user@gmail.com",
-		await bcrypt.hash("user", 10),
+		"user123",
 		"user"
 	);
 
@@ -75,3 +75,5 @@ async function seedUsers(db) {
 
 
 module.exports = { seedDatabase };
+
+
