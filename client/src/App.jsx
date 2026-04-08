@@ -2,6 +2,7 @@ import { Routes, Route, Link } from "react-router-dom";
 import HomePage from "./pages/Homepage.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 import { useState, useEffect } from "react";
 
 
@@ -49,6 +50,7 @@ function App() {
         <Route path="/" element={<HomePage email={email} />} />
         <Route path="/login" element={<Login/>} />
         <Route path="/register" element={<Register/>} />
+        <Route path="/reset-password" element={<ResetPassword/>} />
         <Route path="*" element={<h1 className="text-center mt-20 text-3xl">404 - Page Not Found</h1>} />
       </Routes>
     </>

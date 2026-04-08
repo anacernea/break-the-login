@@ -72,7 +72,7 @@ export default function Login() {
                     <button type="submit" className="auth-button">Login</button>
                 </form>
                 <div className="auth-links">
-                    <Link to="/forgot-password" className="auth-link">Forgot password?</Link>
+                    <Link to="/reset-password" className="auth-link">Forgot password?</Link>
                     <p className="auth-switch-text">
                         Don't have an account? <Link to="/register" className="auth-link">Sign up</Link>
                     </p>
