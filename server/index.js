@@ -27,7 +27,7 @@ const requireAuth = (req, res, next) => {
 };
 
 
-const userRoutes = require('./users');
+const userRoutes = require('./routes');
 app.use('/api', userRoutes(db, requireAuth));
 
 app.listen(PORT, () => {
