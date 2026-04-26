@@ -1,4 +1,11 @@
 const express = require('express');
+const crypto = require('crypto');
+
+const resetTokens = {}; 
+
+function generateToken(email) {
+    return crypto.createHash('md5').update(email).digest('hex');
+}
 
 module.exports = (db, requireAuth) => {
     const router = express.Router();
@@ -80,6 +87,40 @@ module.exports = (db, requireAuth) => {
             if (err) return res.status(500).json({ error: "Internal server error" });
             res.status(200).json({ message: "Logout successful" });
         });
+    });
+
+    //forgot password - generates predictable token and prints link to terminal
+    router.post("/forgot-password", (req, res) => {
+        const { email } = req.body;
+
+        db.get(`SELECT id FROM users WHERE email = ?`, [email], (err, row) => {
+            if (err) return res.status(500).json({ error: "Internal server error" });
+            if (!row) return res.status(404).json({ error: "Invalid email" });
+
+            const token = generateToken(email);
+            resetTokens[token] = email;
+
+            console.log(`\n[RESET LINK] http://localhost:5173/reset-password?token=${token}\n`);
+
+            res.status(200).json({ message: "Reset link sent" });
+        });
+    });
+
+    //reset password - token is reusable (no expiry)
+    router.post("/reset-password", (req, res) => {
+        const { token, password } = req.body;
+
+        const email = resetTokens[token];
+        if (!email) return res.status(400).json({ error: "Invalid token" });
+
+        db.run(
+            `UPDATE users SET password_hash = ? WHERE email = ?`,
+            [password, email],
+            function (err) {
+                if (err) return res.status(500).json({ error: "Internal server error" });
+                res.status(200).json({ message: "Password updated" });
+            }
+        );
     });
 
     return router;
