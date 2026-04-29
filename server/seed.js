@@ -2,10 +2,10 @@
 async function seedDatabase(db) {
 
 	initializeSchema(db);
-	const users = await seedUsers(db);
-	console.log("Database seeding complete!");
-	console.log(`Users: ${users.length}`);
-	return { users };
+	// const users = await seedUsers(db);
+	// console.log("Database seeding complete!");
+	// console.log(`Users: ${users.length}`);
+	// return { users };
 }
 
 //obs: deocamdata parola va fi stocata in clar, chiar daca campul se numeste password_hash

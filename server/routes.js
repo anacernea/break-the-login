@@ -78,6 +78,18 @@ module.exports = (db, requireAuth) => {
         const { email, password } = req.body;
         const ip = req.ip;
 
+        if (!password || password.length < 8) {
+            logAuthAudit(null, 'REGISTER_FAILED', ip);
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        //cel putin o litera mica, mare si o cifra
+        const complexityRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+        if (!complexityRegex.test(password)) {
+            logAuthAudit(null, 'REGISTER_FAILED', ip);
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
         db.get(`SELECT id FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) {
                 logAuthAudit(null, 'REGISTER_FAILED', ip);
@@ -109,14 +121,10 @@ module.exports = (db, requireAuth) => {
         const ip = req.ip;
 
         db.get(`SELECT * FROM users WHERE email = ?`, [email], (err, row) => {
-            if (err) return res.status(500).json({ error: "Internal server error" }); //
-            if (!row) {
-                logAuthAudit(null, 'LOGIN_FAILED', ip);
-                return res.status(401).json({ error: "Invalid email" });
-            }
-            if (password !== row.password_hash) {
-                logAuthAudit(row.id, 'LOGIN_FAILED', ip);
-                return res.status(401).json({ error: "Invalid password" });
+            if (err) return res.status(500).json({ error: "Internal server error" });
+            if (!row || password !== row.password_hash) {
+                logAuthAudit(row ? row.id : null, 'LOGIN_FAILED', ip);
+                return res.status(401).json({ error: "Invalid credentials" });
             }
             req.session.userId = row.id;
             logAuthAudit(row.id, 'LOGIN_SUCCESS', ip);
