@@ -4,6 +4,8 @@ const bcrypt = require('bcrypt');
 
 const SALT_ROUNDS = 12;
 
+const DUMMY_HASH = bcrypt.hash('timing-protection-break-the-login', SALT_ROUNDS);
+
 const resetTokens = {};
 
 function generateToken(email) {
@@ -126,19 +128,20 @@ module.exports = (db, requireAuth) => {
     });
 
     //login
-    router.post("/login", (req, res) => {
+    router.post("/login", async (req, res) => {
         const { email, password } = req.body;
         const ip = req.ip;
 
+        const dummyHash = await DUMMY_HASH;
+
         db.get(`SELECT * FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) return res.status(500).json({ error: "Internal server error" });
-            if (!row) {
-                logAuthAudit(null, 'LOGIN_FAILED', ip);
-                return res.status(401).json({ error: "Invalid credentials" });
-            }
-            bcrypt.compare(password, row.password_hash).then((match) => {
-                if (!match) {
-                    logAuthAudit(row.id, 'LOGIN_FAILED', ip);
+
+            const hash = row ? row.password_hash : dummyHash;
+
+            bcrypt.compare(password, hash).then((match) => {
+                if (!row || !match) {
+                    logAuthAudit(row ? row.id : null, 'LOGIN_FAILED', ip);
                     return res.status(401).json({ error: "Invalid credentials" });
                 }
                 req.session.userId = row.id;
