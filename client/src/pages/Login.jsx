@@ -30,7 +30,7 @@ export default function Login() {
                     } else if (data.error === "Invalid password") {
                         setPasswordError("Invalid password.");
                     } else {
-                        setEmailError("Something went wrong. Please try again.");
+                        setEmailError("Invalid credentials");
                     }
                 }
             })

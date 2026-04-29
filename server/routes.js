@@ -1,5 +1,8 @@
 const express = require('express');
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+
+const SALT_ROUNDS = 12;
 
 const resetTokens = {};
 
@@ -90,28 +93,35 @@ module.exports = (db, requireAuth) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
+        const genericResponse = { message: "If this email is not registered, your account has been created." };
+
         db.get(`SELECT id FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) {
                 logAuthAudit(null, 'REGISTER_FAILED', ip);
                 return res.status(500).json({ error: "Internal server error" });
             }
             if (row) {
-                logAuthAudit(null, 'REGISTER_FAILED', ip);
-                return res.status(409).json({ error: "Email already in use" });
+                logAuthAudit(null, 'REGISTER_FAILED_EMAIL_EXISTS', ip);
+                return res.status(200).json(genericResponse);
             }
 
-            db.run(
-                `INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user')`,
-                [email, password],
-                function (err) {
-                    if (err) {
-                        logAuthAudit(null, 'REGISTER_FAILED', ip);
-                        return res.status(500).json({ error: "Internal server error" });
+            bcrypt.hash(password, SALT_ROUNDS).then((hash) => {
+                db.run(
+                    `INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'user')`,
+                    [email, hash],
+                    function (err) {
+                        if (err) {
+                            logAuthAudit(null, 'REGISTER_FAILED', ip);
+                            return res.status(500).json({ error: "Internal server error" });
+                        }
+                        logAuthAudit(this.lastID, 'REGISTER_SUCCESS', ip);
+                        res.status(200).json(genericResponse);
                     }
-                    logAuthAudit(this.lastID, 'REGISTER_SUCCESS', ip);
-                    res.status(201).json({ id: this.lastID, email });
-                }
-            );
+                );
+            }).catch(() => {
+                logAuthAudit(null, 'REGISTER_FAILED', ip);
+                res.status(500).json({ error: "Internal server error" });
+            });
         });
     });
 
@@ -122,14 +132,20 @@ module.exports = (db, requireAuth) => {
 
         db.get(`SELECT * FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) return res.status(500).json({ error: "Internal server error" });
-            if (!row || password !== row.password_hash) {
-                logAuthAudit(row ? row.id : null, 'LOGIN_FAILED', ip);
+            if (!row) {
+                logAuthAudit(null, 'LOGIN_FAILED', ip);
                 return res.status(401).json({ error: "Invalid credentials" });
             }
-            req.session.userId = row.id;
-            logAuthAudit(row.id, 'LOGIN_SUCCESS', ip);
-            logAuthAudit(row.id, 'SESSION_CREATED', ip);
-            res.status(200).json({ id: row.id, email: row.email, role: row.role });
+            bcrypt.compare(password, row.password_hash).then((match) => {
+                if (!match) {
+                    logAuthAudit(row.id, 'LOGIN_FAILED', ip);
+                    return res.status(401).json({ error: "Invalid credentials" });
+                }
+                req.session.userId = row.id;
+                logAuthAudit(row.id, 'LOGIN_SUCCESS', ip);
+                logAuthAudit(row.id, 'SESSION_CREATED', ip);
+                res.status(200).json({ id: row.id, email: row.email, role: row.role });
+            }).catch(() => res.status(500).json({ error: "Internal server error" }));
         });
     });
 
@@ -153,23 +169,25 @@ module.exports = (db, requireAuth) => {
         const { email } = req.body;
         const ip = req.ip;
 
+        const genericResponse = { message: "If an account with this email exists, a reset link has been sent." };
+
         db.get(`SELECT id FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) {
                 logAuthAudit(null, 'SERVER_ERROR', ip);
                 return res.status(500).json({ error: "Internal server error" });
             }
-            if (!row){
+            if (!row) {
                 logAuthAudit(null, 'PASSWORD_RESET_REQUEST_FAILED', ip);
-                return res.status(404).json({ error: "Invalid email" });
-            } 
+                return res.status(200).json(genericResponse);
+            }
 
             const token = generateToken(email);
             resetTokens[token] = email;
 
-            logAuthAudit(row.id, 'PASSWORD_RESET_REQUEST_SUCCESS', ip); //
+            logAuthAudit(row.id, 'PASSWORD_RESET_REQUEST_SUCCESS', ip);
             console.log(`\n[RESET LINK] http://localhost:5173/reset-password?token=${token}\n`);
 
-            res.status(200).json({ message: "Reset link sent" });
+            res.status(200).json(genericResponse);
         });
     });
 
@@ -184,24 +202,40 @@ module.exports = (db, requireAuth) => {
             return res.status(400).json({ error: "Invalid token" });
         }
 
+        if (!password || password.length < 8) {
+            logAuthAudit(null, 'PASSWORD_RESET_FAILED', ip);
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        const complexityRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+        if (!complexityRegex.test(password)) {
+            logAuthAudit(null, 'PASSWORD_RESET_FAILED', ip);
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
         db.get(`SELECT id FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) {
                 logAuthAudit(null, 'SERVER_ERROR', ip);
                 return res.status(500).json({ error: "Internal server error" });
             }
 
-            db.run(
-                `UPDATE users SET password_hash = ? WHERE email = ?`,
-                [password, email],
-                function (err) {
-                    if (err) {
-                        logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_FAILED', ip);
-                        return res.status(500).json({ error: "Internal server error" });
+            bcrypt.hash(password, SALT_ROUNDS).then((hash) => {
+                db.run(
+                    `UPDATE users SET password_hash = ? WHERE email = ?`,
+                    [hash, email],
+                    function (err) {
+                        if (err) {
+                            logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_FAILED', ip);
+                            return res.status(500).json({ error: "Internal server error" });
+                        }
+                        logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_SUCCESS', ip);
+                        res.status(200).json({ message: "Password updated" });
                     }
-                    logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_SUCCESS', ip);
-                    res.status(200).json({ message: "Password updated" });
-                }
-            );
+                );
+            }).catch(() => {
+                logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_FAILED', ip);
+                res.status(500).json({ error: "Internal server error" });
+            });
         });
     });
 

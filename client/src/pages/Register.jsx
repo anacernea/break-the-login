@@ -7,10 +7,12 @@ export default function Register() {
     const [password, setPassword] = useState("");
     const [passwordCheck, setPasswordCheck] = useState("");
     const [error, setError] = useState("");
+    const [message, setMessage] = useState("");
 
     const handleSubmit = (e) => {
         e.preventDefault();
         setError("");
+        setMessage("");
         if (password !== passwordCheck) {
             setError("Passwords do not match.");
             return;
@@ -23,11 +25,11 @@ export default function Register() {
             body: JSON.stringify({ email, password })
         })
             .then(async (response) => {
+                const data = await response.json();
                 if (response.ok) {
-                    alert("Registration successful! Please log in.");
-                    window.location.href = "/login";
+                    setMessage(data.message);
+                    setTimeout(() => { window.location.href = "/login"; }, 2000);
                 } else {
-                    const data = await response.json();
                     setError(data.error || "Registration failed.");
                 }
             })
@@ -76,6 +78,7 @@ export default function Register() {
                         />
                     </div>
                     {error && <p className="auth-error">{error}</p>}
+                    {message && <p className="auth-success">{message}</p>}
                     <button type="submit" className="auth-button">Sign Up</button>
                 </form>
                 <div className="auth-links">

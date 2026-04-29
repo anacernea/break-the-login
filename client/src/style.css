@@ -60,6 +60,12 @@
     margin: 0;
 }
 
+.auth-success {
+    color: #388e3c;
+    font-size: 13px;
+    margin: 0;
+}
+
 .auth-button {
     margin-top: 6px;
     padding: 13px;
