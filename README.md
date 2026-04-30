@@ -27,10 +27,12 @@ break-the-login/
 │   └── database.db  # Fisier SQLite (generat automat)
 └── README.md
 ```
+## Branch-uri
+Am construit aplicația vulnerabila pe branch-ul “main”, iar pe “vulnerable” am reparat problemele de securitate.
 
 ## Baza de date
 
-SQLite, fisier local la `server/database.db`, care se creeaza automat
+SQLite, fisier local la `server/database.db`, care se creeaza automat.
 
 ## Rulare locala
 
