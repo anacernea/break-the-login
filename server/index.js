@@ -15,7 +15,12 @@ app.use(session({
     secret: 'secret-key-break-the-login',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: false }
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 60 * 1000
+    }
 }));
 
 const requireAuth = (req, res, next) => {

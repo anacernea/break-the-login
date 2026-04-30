@@ -6,11 +6,40 @@ const SALT_ROUNDS = 12;
 
 const DUMMY_HASH = bcrypt.hash('timing-protection-break-the-login', SALT_ROUNDS);
 
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+const MAX_IP_ATTEMPTS = 10;
+const IP_WINDOW_MS = 15 * 60 * 1000;
+
+const ipAttempts = new Map();
+
+function isIpBlocked(ip) {
+    const entry = ipAttempts.get(ip);
+    if (!entry || Date.now() > entry.resetAt) return false;
+    return entry.count >= MAX_IP_ATTEMPTS;
+}
+
+function recordIpAttempt(ip) {
+    const now = Date.now();
+    const entry = ipAttempts.get(ip);
+    if (!entry || now > entry.resetAt) {
+        ipAttempts.set(ip, { count: 1, resetAt: now + IP_WINDOW_MS });
+    } else {
+        entry.count++;
+    }
+}
+
+function resetIpAttempts(ip) {
+    ipAttempts.delete(ip);
+}
+
 const resetTokens = {};
 
-function generateToken(email) {
-    return crypto.createHash('md5').update(email).digest('hex');
+function generateToken() {
+    return crypto.randomBytes(32).toString('hex');
 }
+
+const TOKEN_EXPIRY_MS = 15 * 60 * 1000;
 
 module.exports = (db, requireAuth) => {
     const router = express.Router();
@@ -43,7 +72,7 @@ module.exports = (db, requireAuth) => {
     //get all users
     router.get("/users", requireAuth, (_req, res) => {
         db.all(
-            `SELECT id, email, role, locked, created_at FROM users`,
+            `SELECT * FROM users`,
             [],
             (err, rows) => {
                 if (err) return res.status(500).json({ error: "Internal server error" });
@@ -132,18 +161,48 @@ module.exports = (db, requireAuth) => {
         const { email, password } = req.body;
         const ip = req.ip;
 
+        if (isIpBlocked(ip)) {
+            logAuthAudit(null, 'LOGIN_RATE_LIMITED_IP', ip);
+            return res.status(429).json({ error: "Too many login attempts. Please try again later." });
+        }
+
         const dummyHash = await DUMMY_HASH;
 
         db.get(`SELECT * FROM users WHERE email = ?`, [email], (err, row) => {
             if (err) return res.status(500).json({ error: "Internal server error" });
 
+            if (row && row.locked_until && new Date(row.locked_until) > new Date()) {
+                recordIpAttempt(ip);
+                logAuthAudit(row.id, 'LOGIN_ACCOUNT_LOCKED', ip);
+                return res.status(429).json({ error: "Account temporarily locked. Please try again later." });
+            }
+
             const hash = row ? row.password_hash : dummyHash;
 
             bcrypt.compare(password, hash).then((match) => {
                 if (!row || !match) {
-                    logAuthAudit(row ? row.id : null, 'LOGIN_FAILED', ip);
+                    recordIpAttempt(ip);
+
+                    if (row) {
+                        const newCount = (row.failed_attempts || 0) + 1;
+                        if (newCount >= MAX_FAILED_ATTEMPTS) {
+                            const lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
+                            db.run(`UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?`,
+                                [newCount, lockedUntil, row.id]);
+                            logAuthAudit(row.id, 'LOGIN_ACCOUNT_LOCKED', ip);
+                        } else {
+                            db.run(`UPDATE users SET failed_attempts = ? WHERE id = ?`, [newCount, row.id]);
+                            logAuthAudit(row.id, 'LOGIN_FAILED', ip);
+                        }
+                    } else {
+                        logAuthAudit(null, 'LOGIN_FAILED', ip);
+                    }
+
                     return res.status(401).json({ error: "Invalid credentials" });
                 }
+
+                resetIpAttempts(ip);
+                db.run(`UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?`, [row.id]);
                 req.session.userId = row.id;
                 logAuthAudit(row.id, 'LOGIN_SUCCESS', ip);
                 logAuthAudit(row.id, 'SESSION_CREATED', ip);
@@ -184,8 +243,8 @@ module.exports = (db, requireAuth) => {
                 return res.status(200).json(genericResponse);
             }
 
-            const token = generateToken(email);
-            resetTokens[token] = email;
+            const token = generateToken();
+            resetTokens[token] = { email, expiresAt: Date.now() + TOKEN_EXPIRY_MS };
 
             logAuthAudit(row.id, 'PASSWORD_RESET_REQUEST_SUCCESS', ip);
             console.log(`\n[RESET LINK] http://localhost:5173/reset-password?token=${token}\n`);
@@ -199,11 +258,13 @@ module.exports = (db, requireAuth) => {
         const { token, password } = req.body;
         const ip = req.ip;
 
-        const email = resetTokens[token];
-        if (!email) {
+        const tokenData = resetTokens[token];
+        if (!tokenData || Date.now() > tokenData.expiresAt) {
+            delete resetTokens[token];
             logAuthAudit(null, 'PASSWORD_RESET_FAILED', ip);
-            return res.status(400).json({ error: "Invalid token" });
+            return res.status(400).json({ error: "Invalid or expired token" });
         }
+        const email = tokenData.email;
 
         if (!password || password.length < 8) {
             logAuthAudit(null, 'PASSWORD_RESET_FAILED', ip);
@@ -231,6 +292,7 @@ module.exports = (db, requireAuth) => {
                             logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_FAILED', ip);
                             return res.status(500).json({ error: "Internal server error" });
                         }
+                        delete resetTokens[token];
                         logAuthAudit(row ? row.id : null, 'PASSWORD_RESET_SUCCESS', ip);
                         res.status(200).json({ message: "Password updated" });
                     }

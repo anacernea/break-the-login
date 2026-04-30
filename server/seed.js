@@ -2,13 +2,18 @@
 async function seedDatabase(db) {
 
 	initializeSchema(db);
+	runMigrations(db);
 	// const users = await seedUsers(db);
 	// console.log("Database seeding complete!");
 	// console.log(`Users: ${users.length}`);
 	// return { users };
 }
 
-//obs: deocamdata parola va fi stocata in clar, chiar daca campul se numeste password_hash
+function runMigrations(db) {
+	db.run(`ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0`, () => {});
+	db.run(`ALTER TABLE users ADD COLUMN locked_until TIMESTAMP`, () => {});
+}
+
 function initializeSchema(db) {
 	db.exec(`
 		CREATE TABLE IF NOT EXISTS users (

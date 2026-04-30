@@ -7,11 +7,13 @@ export default function Login() {
     const [password, setPassword] = useState("");
     const [emailError, setEmailError] = useState("");
     const [passwordError, setPasswordError] = useState("");
+    const [blockError, setBlockError] = useState("");
 
     const handleSubmit = (e) => {
         e.preventDefault();
         setEmailError("");
         setPasswordError("");
+        setBlockError("");
         fetch("/api/login", {
             method: "POST",
             headers: {
@@ -25,12 +27,15 @@ export default function Login() {
                     window.location.href = "/";
                 } else {
                     const data = await response.json();
-                    if (data.error === "Invalid email") {
+                    if (data.error === "Too many login attempts. Please try again later." ||
+                        data.error === "Account temporarily locked. Please try again later.") {
+                        setBlockError(data.error);
+                    } else if (data.error === "Invalid email") {
                         setEmailError("Invalid email address.");
                     } else if (data.error === "Invalid password") {
                         setPasswordError("Invalid password.");
                     } else {
-                        setEmailError("Invalid credentials");
+                        setEmailError("Invalid credentials.");
                     }
                 }
             })
@@ -69,6 +74,7 @@ export default function Login() {
                         />
                         {passwordError && <p className="auth-error">{passwordError}</p>}
                     </div>
+                    {blockError && <p className="auth-error">{blockError}</p>}
                     <button type="submit" className="auth-button">Login</button>
                 </form>
                 <div className="auth-links">
