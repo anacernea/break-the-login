@@ -226,7 +226,7 @@ module.exports = (db, requireAuth) => {
         });
     });
 
-    //forgot password - generates predictable token and prints link to terminal
+    //forgot password 
     router.post("/forgot-password", (req, res) => {
         const { email } = req.body;
         const ip = req.ip;
@@ -253,7 +253,7 @@ module.exports = (db, requireAuth) => {
         });
     });
 
-    //reset password - token is reusable (no expiry)
+    //reset password 
     router.post("/reset-password", (req, res) => {
         const { token, password } = req.body;
         const ip = req.ip;
