@@ -28,7 +28,7 @@ break-the-login/
 └── README.md
 ```
 ## Branch-uri
-Am construit aplicația vulnerabila pe branch-ul “main”, iar pe “vulnerable” am reparat problemele de securitate.
+Am construit aplicația vulnerabila pe branch-ul “main”, iar pe “secured” am reparat problemele de securitate.
 
 ## Baza de date
 
