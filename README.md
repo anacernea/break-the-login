@@ -25,7 +25,6 @@ break-the-login/
 │   ├── routes.js    # Toate rutele API (/api/*)
 │   ├── seed.js      # Schema BD si migrari
 │   └── database.db  # Fisier SQLite (generat automat)
-└── README.md
 ```
 ## Branch-uri
 Am construit aplicația vulnerabila pe branch-ul “main”, iar pe “secured” am reparat problemele de securitate. 
